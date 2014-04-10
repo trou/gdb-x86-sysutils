@@ -23,6 +23,12 @@ class segment_desc:
 
         self.limit *= 4096 if self.g else 1
 
+    def is_tss(self):
+        if self.s == 0 and (self.type == 9 or self.type == 11):
+            return True
+        else:
+            return False
+
     def type_str(self):
         if (self.type>>3)&1:
             # code
@@ -64,7 +70,14 @@ class tss_data:
                    self.gs, _, ldtss, _, t, iomap) = struct.unpack("HHIHHIHHIHH11I16H", data)
 
     def __str__(self):
-        return "CR3 : %08x" % self.cr3
+        s = "Prev : %04x  CR3 : %08x, CS:EIP: %04x:%08x " % (self.ptl, self.cr3, self.cs, self.eip)
+        s += "ds : %04x " % (self.ds)
+        s += "es : %04x " % (self.es)
+        s += "fs : %04x " % (self.fs)
+        s += "gs : %04x " % (self.gs)
+        s += "ss : %04x " % (self.ss)
+        return s
+            
 
 class GdtCommand(gdb.Command):
     "Commands for GDT parsing"
@@ -84,12 +97,22 @@ class GdtDumpCommand(gdb.Command):
 
     # TODO : add limit
     def invoke (self, arg, from_tty):
-        ad = long(arg, 0)
+        args = arg.split(" ")
+        print args
+        ad = long(args[0], 0)
         inf = gdb.selected_inferior()
         for i in range(0, 4096):
             desc = struct.unpack("<Q", inf.read_memory(ad+i*8, 8))[0]
             if desc != 0:
-                print "#%04d : %016x : %s" % (i,desc, segment_desc(desc))
+                s = segment_desc(desc)
+                print "#%04d : %016x : %s" % (i, desc, s)
+                if s.is_tss() and len(args)>1 and args[1] == "-t":
+                    try:
+                        tss = tss_data(inf.read_memory(s.base, 104))
+                        if tss.eip != 0:
+                            print tss 
+                    except:
+                        continue
 
 class GdtTssCommand(gdb.Command):
     "Dump TSS"
@@ -100,7 +123,8 @@ class GdtTssCommand(gdb.Command):
             gdb.COMPLETE_NONE, True)
 
     def invoke (self, arg, from_tty):
-        ad = long(arg, 0)
+        args = arg.split(" ")
+        ad = long(args[0], 0)
         inf = gdb.selected_inferior()
         sd = tss_data(inf.read_memory(ad, 104))
         print sd

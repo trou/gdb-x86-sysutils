@@ -79,11 +79,11 @@ class tss_data:
         return s
             
 
-class GdtCommand(gdb.Command):
-    "Commands for GDT parsing"
+class SysCommand(gdb.Command):
+    "Commands for System data parsing"
 
     def __init__ (self):
-        super (GdtCommand, self).__init__ ("gdt",
+        super (SysCommand, self).__init__ ("sys",
             gdb.COMMAND_SUPPORT,
             gdb.COMPLETE_NONE, True)
 
@@ -91,7 +91,7 @@ class GdtDumpCommand(gdb.Command):
     "Dump GDT to console"
 
     def __init__ (self):
-        super (GdtDumpCommand, self).__init__ ("gdt dump",
+        super (GdtDumpCommand, self).__init__ ("sys gdt",
             gdb.COMMAND_SUPPORT,
             gdb.COMPLETE_NONE, True)
 
@@ -118,7 +118,7 @@ class GdtTssCommand(gdb.Command):
     "Dump TSS"
 
     def __init__ (self):
-        super (GdtTssCommand, self).__init__ ("gdt tss",
+        super (GdtTssCommand, self).__init__ ("sys tss",
             gdb.COMMAND_SUPPORT,
             gdb.COMPLETE_NONE, True)
 
@@ -129,11 +129,11 @@ class GdtTssCommand(gdb.Command):
         sd = tss_data(inf.read_memory(ad, 104))
         print sd
 
-class GdtDecodeCommand(gdb.Command):
-    "Decode GDT descriptor"
+class SegmentDecodeCommand(gdb.Command):
+    "Decode Segment descriptor"
 
     def __init__ (self):
-        super (GdtDecodeCommand, self).__init__ ("gdt desc",
+        super (GdtDecodeCommand, self).__init__ ("sys sec_desc",
             gdb.COMMAND_SUPPORT,
             gdb.COMPLETE_NONE, True)
 
@@ -141,7 +141,8 @@ class GdtDecodeCommand(gdb.Command):
         sd = segment_desc(int(arg, 0))
         print sd
 
-GdtCommand()
-GdtDecodeCommand()
+
+SysCommand()
+SegmentDecodeCommand()
 GdtDumpCommand()
 GdtTssCommand()

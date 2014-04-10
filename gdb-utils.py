@@ -9,7 +9,7 @@ class segment_desc:
         self.base |= ((self.desc >> (32+24))&0xFFF)<<24;
 
         self.limit = self.desc & 0xFFFF;
-        self.limit |= (self.desc >> (32+16))&0xF;
+        self.limit |= ((self.desc >> 32+16)&0xF)<<16;
 
         self.type = (self.desc >> (32+8))&0xF;
 
@@ -20,6 +20,8 @@ class segment_desc:
         self.l = (self.desc >> (32+21))&1;
         self.db = (self.desc >> (32+22))&1;
         self.g = (self.desc >> (32+23))&1;
+
+        self.limit *= 4096 if self.g else 1
 
     def type_str(self):
         if (self.type>>3)&1:
@@ -38,12 +40,12 @@ class segment_desc:
     def __str__(self):
         if self.s == 1:
             # CODE/DATA
-            s = "DPL : %d Base : %08x Limit : %04x " % (self.dpl, self.base, self.limit)
+            s = "DPL : %d Base : %08x Limit : %08x " % (self.dpl, self.base, self.limit)
             s += "D/B: %db " % (16,32)[self.db]
             s += "Type: %s" % ",".join(self.type_str())
         else:
             # System
-            s = "DPL : %d Base : %08x Limit : %04x " % (self.dpl, self.base, self.limit)
+            s = "DPL : %d Base : %08x Limit : %08x " % (self.dpl, self.base, self.limit)
             s += "AVL : %d  " % self.avl
             s += "Type: %s" % ("Reserved", "16b TSS (A)", "LDT", "16b TSS (B)", "16b Call G", "Task Gate", "16b Int G", "16b Trap G", "Reserved", "32b TSS (A)", "Reserved", "32b TSS (B)", "32b Call G", "Reserved", "32b Int G", "32b Trap G")[self.type]
         return s

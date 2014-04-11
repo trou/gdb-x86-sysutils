@@ -1,6 +1,46 @@
 import gdb
 import struct
 
+class mem_map:
+    def __init__(self):
+        self.p = {}
+        self.np = {}
+
+    def add_page_4k(self, m, addr):
+        # Check if adjacent :
+        if addr in m:
+            # end, coallesce with previous
+            if m[addr][1] == addr:
+                new_r = (m[addr][0], addr+4096)
+                m[new_r[0]] = new_r
+                del m[addr]
+                m[addr+4096] = new_r
+        elif (addr+4096) in m:
+            # start, merge with next
+            new_r = (addr,m[addr][1])
+            del m[addr[0]]
+            m[addr[0]]=new_r
+            m[addr[1]]=new_r
+        elif addr not in m:
+            new_r = (addr, addr+4096)
+            m[addr] = new_r
+            m[addr+4096] = new_r
+        else:
+            # should not happen !
+            raise Exception("Page already present!")
+
+    def add_page_4k_present(self, addr):
+        self.add_page_4k(self.p, addr)
+
+    def add_page_4k_not_present(self, addr):
+        self.add_page_4k(self.np, addr)
+
+    def prt(self):
+        s = set(self.p.values())
+        
+        for r in sorted(list(s), key = lambda m: m[0]):
+            print "%08x-%08x" % r
+
 class segment_desc:
     def __init__(self, val):
         self.desc = val
@@ -67,7 +107,7 @@ class tss_data:
                    self.esp2, self.ss2, _, self.cr3, self.eip, self.eflags, self.eax, self.ecx,
                    self.edx, self.ebx, self.esp, self.ebp, self.esi, self.edi, self.es, _,
                    self.cs, _, self.ss, _, self.ds, _, self.fs, _,
-                   self.gs, _, ldtss, _, t, iomap) = struct.unpack("HHIHHIHHIHH11I16H", data)
+                   self.gs, _, self.ldtss, _, self.t, self.iomap) = struct.unpack("HHIHHIHHIHH11I16H", data)
 
     def __str__(self):
         s = "Prev : %04x  CR3 : %08x, CS:EIP: %04x:%08x " % (self.ptl, self.cr3, self.cs, self.eip)
@@ -149,20 +189,36 @@ class SysMemMap(gdb.Command):
             gdb.COMPLETE_NONE, True)
 
     def invoke (self, arg, from_tty):
-        ad = int(arg, 0)
+        args = arg.split(" ")
+        ad = long(args[0], 0)
+
+        print args
+        if len(args) == 3:
+            start = long(args[1], 0)
+            end = long(args[2], 0)
+        else:
+            start = 0
+            end = 1024
+
         inf = gdb.selected_inferior()
-        for i in range(0, 1023):
+        mmap = mem_map()
+        for i in range(start, end):
+            if i%20 == 0:
+              print "%d/1023" % i
             pde = struct.unpack("I", inf.read_memory(ad+i*4, 4))[0]
             if pde&1:
                 pte_b = pde&0xFFFFF000
                 s = "%08x PS:%d US:%d" % (pte_b, (pde>>7)&1, (pde>>2)&1)
-                for j in range(0, 1023):
+                for j in range(0, 1024):
                     pte = struct.unpack("I", inf.read_memory(pte_b+j*4, 4))[0]
                     p_b = pte&0xFFFFF000
                     if pte&1:
-                        print "%08x : present : %08x" % (((i<<22)|(j<<12)), p_b)
+                        print "%08x : present : %08x" % (i, j, ((i<<22)|(j<<12)), p_b)
+                        mmap.add_page_4k_present((i<<22)|(j<<12))
                     else:
-                        print "%08x : NOT present" % ((i<<22)|(j<<12))
+                        #print "%08x : NOT present" % ((i<<22)|(j<<12))
+                        mmap.add_page_4k_not_present((i<<22)|(j<<12))
+        mmap.prt()
 
 
 SysCommand()

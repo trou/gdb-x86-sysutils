@@ -98,7 +98,6 @@ class GdtDumpCommand(gdb.Command):
     # TODO : add limit
     def invoke (self, arg, from_tty):
         args = arg.split(" ")
-        print args
         ad = long(args[0], 0)
         inf = gdb.selected_inferior()
         for i in range(0, 4096):
@@ -110,15 +109,15 @@ class GdtDumpCommand(gdb.Command):
                     try:
                         tss = tss_data(inf.read_memory(s.base, 104))
                         if tss.eip != 0:
-                            print tss 
+                            print "    "+str(tss)
                     except:
                         continue
 
-class GdtTssCommand(gdb.Command):
+class SysTssCommand(gdb.Command):
     "Dump TSS"
 
     def __init__ (self):
-        super (GdtTssCommand, self).__init__ ("sys tss",
+        super (SysTssCommand, self).__init__ ("sys tss",
             gdb.COMMAND_SUPPORT,
             gdb.COMPLETE_NONE, True)
 
@@ -133,7 +132,7 @@ class SegmentDecodeCommand(gdb.Command):
     "Decode Segment descriptor"
 
     def __init__ (self):
-        super (GdtDecodeCommand, self).__init__ ("sys sec_desc",
+        super (SegmentDecodeCommand, self).__init__ ("sys sec_desc",
             gdb.COMMAND_SUPPORT,
             gdb.COMPLETE_NONE, True)
 
@@ -141,8 +140,33 @@ class SegmentDecodeCommand(gdb.Command):
         sd = segment_desc(int(arg, 0))
         print sd
 
+class SysMemMap(gdb.Command):
+    "Print Memory Map from Page Directory"
+
+    def __init__ (self):
+        super (SysMemMap, self).__init__ ("sys memmap",
+            gdb.COMMAND_SUPPORT,
+            gdb.COMPLETE_NONE, True)
+
+    def invoke (self, arg, from_tty):
+        ad = int(arg, 0)
+        inf = gdb.selected_inferior()
+        for i in range(0, 1023):
+            pde = struct.unpack("I", inf.read_memory(ad+i*4, 4))[0]
+            if pde&1:
+                pte_b = pde&0xFFFFF000
+                s = "%08x PS:%d US:%d" % (pte_b, (pde>>7)&1, (pde>>2)&1)
+                for j in range(0, 1023):
+                    pte = struct.unpack("I", inf.read_memory(pte_b+j*4, 4))[0]
+                    p_b = pte&0xFFFFF000
+                    if pte&1:
+                        print "%08x : present : %08x" % (((i<<22)|(j<<12)), p_b)
+                    else:
+                        print "%08x : NOT present" % ((i<<22)|(j<<12))
+
 
 SysCommand()
 SegmentDecodeCommand()
 GdtDumpCommand()
-GdtTssCommand()
+SysTssCommand()
+SysMemMap()

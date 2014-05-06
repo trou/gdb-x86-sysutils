@@ -1,36 +1,37 @@
 import gdb
 import struct
+import cstruct
 
 class mem_map:
     def __init__(self):
         self.p = {}
         self.np = {}
 
-    def add_page_4k(self, m, addr):
+    def add_page(self, m, addr, size):
         # Check if adjacent :
         if addr in m:
             # end, coallesce with previous
             if m[addr][1] == addr:
-                new_r = (m[addr][0], addr+4096)
+                new_r = (m[addr][0], addr+size)
                 m[new_r[0]] = new_r
                 del m[addr]
-                m[addr+4096] = new_r
-        elif (addr+4096) in m:
+                m[addr+size] = new_r
+        elif (addr+size) in m:
             # start, merge with next
             new_r = (addr,m[addr][1])
             del m[addr[0]]
             m[addr[0]]=new_r
             m[addr[1]]=new_r
         elif addr not in m:
-            new_r = (addr, addr+4096)
+            new_r = (addr, addr+size)
             m[addr] = new_r
-            m[addr+4096] = new_r
+            m[addr+size] = new_r
         else:
             # should not happen !
             raise Exception("Page already present!")
 
-    def add_page_4k_present(self, addr):
-        self.add_page_4k(self.p, addr)
+    def add_page_present(self, addr, size):
+        self.add_page(self.p, addr, size)
 
     def add_page_4k_not_present(self, addr):
         self.add_page_4k(self.np, addr)
@@ -89,7 +90,10 @@ class segment_desc:
         if self.s == 1:
             # CODE/DATA
             s = "DPL : %d Base : %08x Limit : %08x " % (self.dpl, self.base, self.limit)
-            s += "D/B: %db " % (16,32)[self.db]
+            if self.l == 1 and self.db == 0 :
+                s += "D/B: 64b "
+            else:
+                s += "D/B: %db " % (16,32)[self.db]
             s += "Type: %s" % ",".join(self.type_str())
         else:
             # System
@@ -188,36 +192,80 @@ class SysMemMap(gdb.Command):
             gdb.COMMAND_SUPPORT,
             gdb.COMPLETE_NONE, True)
 
+    def parse_pdt(self, mmap, ad, start, end):
+        for i in range(start, end):
+            if i%20 == 0:
+              print "%d/1023" % i
+            pde = struct.unpack("I", self.inf.read_memory(ad+i*4, 4))[0]
+            if pde&1:
+                pte_b = pde&0xFFFFF000
+                s = "%08x PS:%d US:%d" % (pte_b, (pde>>7)&1, (pde>>2)&1)
+                for j in range(0, 1024):
+                    pte = struct.unpack("I", self.inf.read_memory(pte_b+j*4, 4))[0]
+                    p_b = pte&0xFFFFF000
+                    if pte&1:
+                        print "%08x : present : %08x" % (((i<<22)|(j<<12)), p_b)
+                        mmap.add_page_4k_present((i<<22)|(j<<12))
+                    else:
+                        #print "%08x : NOT present" % ((i<<22)|(j<<12))
+                        mmap.add_page_4k_not_present((i<<22)|(j<<12))
+
+    def parse_pml4(self, mmap, ad, start, end):
+        for i in range(start, end):
+            #if i%20 == 0:
+            #  print "%d/512" % i
+            pml4te = struct.unpack("Q", self.inf.read_memory(ad+i*8, 8))[0]
+            if pml4te&1:
+                pdp_b = pml4te&0x1FFFFFF000
+                s = "PML4TE : (%016x) %016x PS:%d US:%d" % (i<<39, pdp_b, (pml4te>>7)&1, (pml4te>>2)&1)
+                print s
+                for j in range(0,512):
+                    pdpe = struct.unpack("Q", self.inf.read_memory(pdp_b+j*8, 8))[0]
+                    if pdpe&1:
+                        pd_b = pdpe&0x1FFFFFFF000
+                        s = "  PDPE   : (%016x) %016x PS:%d US:%d" % ((i<<39)|j<<30, pd_b, (pdpe>>7)&1, (pdpe>>2)&1)
+                        print s
+                        for k in range(0, 512):
+                            pde = struct.unpack("Q", self.inf.read_memory(pd_b+k*8, 8))[0]
+                            if pde&1:
+                                pt_b = pde&0x1FFFFFFF000
+                                s = "    PDE    : (%016x) %016x PS:%d US:%d" % ((i<<39)|(j<<30)|(k<<21), pt_b, (pde>>7)&1, (pde>>2)&1)
+                                #print s
+                                if (pde>>7)&1 == 1: # 2Mb page
+                                   mmap.add_page_present((i<<39)|(j<<30)|(k<<21), 2*1024*1024)
+                                   continue 
+
+                                for l in range(0, 512):
+                                    pte = struct.unpack("Q", self.inf.read_memory(pt_b+l*8, 8))[0]
+                                    p_b = pte&0x1FFFFFFF000
+                                    if pte&1:
+                                        s = "      PTE    : (%016x) %016x PS:%d US:%d" % ((i<<39)|(j<<30)|(k<<21)|(l<<12), p_b, (pte>>7)&1, (pte>>2)&1)
+                                        #print s
+                                        mmap.add_page_present((i<<39)|(j<<30)|(k<<21)|(l<<12), 4096)
+                                    #else:
+                                    #    mmap.add_page_4k_not_present((i<<39)|(j<<30)|(k<<21)|(l<<12))
+
+
     def invoke (self, arg, from_tty):
         args = arg.split(" ")
         ad = long(args[0], 0)
+        
+        self.inf = gdb.selected_inferior()
 
         print args
-        if len(args) == 3:
+        if len(args) >= 3:
             start = long(args[1], 0)
             end = long(args[2], 0)
         else:
             start = 0
             end = 1024
 
-        inf = gdb.selected_inferior()
         mmap = mem_map()
-        for i in range(start, end):
-            if i%20 == 0:
-              print "%d/1023" % i
-            pde = struct.unpack("I", inf.read_memory(ad+i*4, 4))[0]
-            if pde&1:
-                pte_b = pde&0xFFFFF000
-                s = "%08x PS:%d US:%d" % (pte_b, (pde>>7)&1, (pde>>2)&1)
-                for j in range(0, 1024):
-                    pte = struct.unpack("I", inf.read_memory(pte_b+j*4, 4))[0]
-                    p_b = pte&0xFFFFF000
-                    if pte&1:
-                        print "%08x : present : %08x" % (i, j, ((i<<22)|(j<<12)), p_b)
-                        mmap.add_page_4k_present((i<<22)|(j<<12))
-                    else:
-                        #print "%08x : NOT present" % ((i<<22)|(j<<12))
-                        mmap.add_page_4k_not_present((i<<22)|(j<<12))
+        # long mode ?
+        if len(args) == 4 and args[3] == "-l":
+            self.parse_pml4(mmap, ad, start, end)
+        else :
+            self.parse_pdt(mmap, ad, start, end)
         mmap.prt()
 
 

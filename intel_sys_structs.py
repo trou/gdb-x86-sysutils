@@ -138,17 +138,6 @@ class tss_data(cstruct.CStruct):
                 ("ldtss","u16"),
                 ("t","u16"),
                 ("iomap","u16")]
-
-#    def __init__(self, data):
-#        if len(data) != 104:
-#            raise Exception("toto")
-#        self.raw = data
-#        (self.ptl, _, self.esp0, self.ss0, _, self.esp1, self.ss1, _,
-#                   self.esp2, self.ss2, _, self.cr3, self.eip, self.eflags, self.eax, self.ecx,
-#                   self.edx, self.ebx, self.esp, self.ebp, self.esi, self.edi, self.es, _,
-#                   self.cs, _, self.ss, _, self.ds, _, self.fs, _,
-#                   self.gs, _, self.ldtss, _, self.t, self.iomap) = struct.unpack("HHIHHIHHIHH11I16H", data)
-#
     def __str__(self):
         s = "Prev : %04x  CR3 : %08x, CS:EIP: %04x:%08x " % (self.ptl, self.cr3, self.cs, self.eip)
         s += "ds : %04x " % (self.ds)
@@ -157,5 +146,3 @@ class tss_data(cstruct.CStruct):
         s += "gs : %04x " % (self.gs)
         s += "ss : %04x " % (self.ss)
         return s
-#            
-#

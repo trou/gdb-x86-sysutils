@@ -35,7 +35,7 @@ class GdtDumpCommand(gdb.Command):
                 print "#%04d : %016x : %s" % (i, desc, s)
                 if s.is_tss() and len(args)>1 and args[1] == "-t":
                     try:
-                        tss = tss_data(inf.read_memory(s.base, 104))
+                        tss = tss_data(sex='<', wsize=32).unpack(inf.read_memory(s.base, 102))
                         if tss.eip != 0:
                             print "    "+str(tss)
                     except:
@@ -53,7 +53,7 @@ class SysTssCommand(gdb.Command):
         args = arg.split(" ")
         ad = long(args[0], 0)
         inf = gdb.selected_inferior()
-        sd = tss_data(inf.read_memory(ad, 104))
+        sd = tss_data(sex='<', wsize=32).unpack(inf.read_memory(ad, 102))
         print sd
 
 class SegmentDecodeCommand(gdb.Command):

@@ -53,7 +53,7 @@ class mem_map:
         self.add_page(self.p, addr, size, phy)
 
     def add_page_4k_not_present(self, addr):
-        self.add_page_4k(self.np, addr)
+        self.add_page(self.np, addr, 4096)
 
     def prt(self):
         s = set(self.p.values())

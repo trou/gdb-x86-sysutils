@@ -76,24 +76,35 @@ class SysMemMap(gdb.Command):
             gdb.COMMAND_SUPPORT,
             gdb.COMPLETE_NONE, True)
 
-    # TODO : handle large pages
     def parse_pdt(self, mmap, ad, start, end):
+        # Read whole PD for performance
+        pd =struct.unpack("1024I",self.inf.read_memory(ad, 1024*4))
         for i in range(start, end):
             if i%20 == 0:
               print "%d/1023" % i
-            pde = struct.unpack("I", self.inf.read_memory(ad+i*4, 4))[0]
+            pde = pd[i]
             if pde&1:
-                pte_b = pde&0xFFFFF000
-                s = "%08x PS:%d US:%d" % (pte_b, (pde>>7)&1, (pde>>2)&1)
-                for j in range(0, 1024):
-                    pte = struct.unpack("I", self.inf.read_memory(pte_b+j*4, 4))[0]
-                    p_b = pte&0xFFFFF000
-                    if pte&1:
-                        print "%08x : present : %08x" % (((i<<22)|(j<<12)), p_b)
-                        mmap.add_page_4k_present((i<<22)|(j<<12))
-                    else:
-                        #print "%08x : NOT present" % ((i<<22)|(j<<12))
-                        mmap.add_page_4k_not_present((i<<22)|(j<<12))
+                # check for 4MB page
+                if pde&(1<<7):
+                    page_base = ((pde>>12)&0xFF)<<32
+                    page_base |= pde&0xFFC00000
+                    print "%08x : present : %08x (4MB)" % ((i<<22), p_b)
+                    mmap.add_page_present(i<<22, 4*1024*1024, page_base)
+                else:
+                    # PT base
+                    pt_b = pde&0xFFFFF000
+                    s = "%08x PS:%d US:%d" % (pt_b, (pde>>7)&1, (pde>>2)&1)
+                    # Read whole PT for performance
+                    pt =struct.unpack("1024I",self.inf.read_memory(pt_b, 1024*4))
+                    for j in range(0, 1024):
+                        pte = pt[i]
+                        p_b = pte&0xFFFFF000
+                        if pte&1:
+                            #print "%08x : present : %08x" % (((i<<22)|(j<<12)), p_b)
+                            mmap.add_page_present((i<<22)|(j<<12), 4096, p_b)
+                        else:
+                            #print "%08x : NOT present" % ((i<<22)|(j<<12))
+                            mmap.add_page_4k_not_present((i<<22)|(j<<12))
 
     def parse_pml4(self, mmap, ad, start, end):
         for i in range(start, end):

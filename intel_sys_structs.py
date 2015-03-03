@@ -1,32 +1,45 @@
 import cstruct
 
 class mem_map:
+    """
+    Stores virt->phy map
+    Structure is a dict of :
+        addr => (start, end)
+    each referenced page should be added like this :
+        start => (start, end)
+        end => (start, end)
+    Adjacent pages are merged in add_page
+    """
     def __init__(self):
         self.p = {}
         self.np = {}
 
-    def add_page(self, m, addr, size):
+    def add_page(self, m, new_page_addr, size, phy=None):
+        new_page_end = new_page_addr+size
         # Check if adjacent :
-        if addr in m:
-            # end, coallesce with previous
-            if m[addr][1] == addr:
-                new_r = (m[addr][0], addr+size)
+        if new_page_addr in m:
+            # print "Found start in m " +repr(m[new_page_addr])
+            # addr equals previous page end
+            # => coallesce with previous
+            if new_page_addr == m[new_page_addr][1]:
+                new_r = (m[new_page_addr][0], new_page_end)
                 m[new_r[0]] = new_r
-                del m[addr]
-                m[addr+size] = new_r
-        elif (addr+size) in m:
-            # start, merge with next
-            new_r = (addr,m[addr][1])
-            del m[addr[0]]
-            m[addr[0]]=new_r
-            m[addr[1]]=new_r
-        elif addr not in m:
-            new_r = (addr, addr+size)
-            m[addr] = new_r
-            m[addr+size] = new_r
+                del m[new_page_addr] # delete old "end"
+                m[new_page_end] = new_r
+            else:
+                raise Exception("Page already present !")
+        elif new_page_end in m:
+            # print "Found end in m :"+repr(m[new_page_end])
+            # End of new page is equal to present page addr
+            # merge with next
+            new_r = (new_page_addr,m[new_page_end][1])
+            del m[new_page_end] # delete start of old page
+            m[new_page_addr]=new_r
+            m[new_r[1]]=new_r
         else:
-            # should not happen !
-            raise Exception("Page already present!")
+            new_r = (new_page_addr, new_page_end)
+            m[new_page_addr] = new_r
+            m[new_page_end] = new_r
 
     def add_page_present(self, addr, size):
         self.add_page(self.p, addr, size)

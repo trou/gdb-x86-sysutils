@@ -76,6 +76,7 @@ class SysMemMap(gdb.Command):
             gdb.COMMAND_SUPPORT,
             gdb.COMPLETE_NONE, True)
 
+    # TODO : handle large pages
     def parse_pdt(self, mmap, ad, start, end):
         for i in range(start, end):
             if i%20 == 0:
@@ -132,20 +133,21 @@ class SysMemMap(gdb.Command):
 
     def invoke (self, arg, from_tty):
         args = arg.split(" ")
-        ad = long(args[0], 0)
+        ad = long(args[0], 0) # base address of tables (cr3)
         
         self.inf = gdb.selected_inferior()
 
         print args
         if len(args) >= 3:
-            start = long(args[1], 0)
-            end = long(args[2], 0)
+            start = long(args[1], 0) # first entry index
+            end = long(args[2], 0) # last entry index
         else:
             start = 0
             end = 1024
 
         mmap = mem_map()
         # long mode ?
+        # TODO : use gdb.architecture
         if len(args) == 4 and args[3] == "-l":
             self.parse_pml4(mmap, ad, start, end)
         else :

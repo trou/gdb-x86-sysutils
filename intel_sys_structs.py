@@ -4,45 +4,53 @@ class mem_map:
     """
     Stores virt->phy map
     Structure is a dict of :
-        addr => (start, end)
+        addr => (start, end, physical address of start, physical end)
     each referenced page should be added like this :
         start => (start, end)
         end => (start, end)
-    Adjacent pages are merged in add_page
+    Adjacent pages are merged in add_page if physical 
+    addresses are adjacent too
     """
     def __init__(self):
         self.p = {}
         self.np = {}
 
-    def add_page(self, m, new_page_addr, size, phy=None):
+    def add_page(self, m, new_page_addr, size, new_page_phy=None):
         new_page_end = new_page_addr+size
+        if not new_page_phy:
+            new_page_phy = new_page_addr
+        new_phy_end = new_page_phy+size
+
+        # Default case
+        new_r = (new_page_addr, new_page_end, new_page_phy, new_phy_end)
+
         # Check if adjacent :
         if new_page_addr in m:
             # print "Found start in m " +repr(m[new_page_addr])
             # addr equals previous page end
             # => coallesce with previous
             if new_page_addr == m[new_page_addr][1]:
-                new_r = (m[new_page_addr][0], new_page_end)
-                m[new_r[0]] = new_r
-                del m[new_page_addr] # delete old "end"
-                m[new_page_end] = new_r
+                # check if physical is also adjacent with previous end
+                if new_page_phy == m[new_page_addr][3] :
+                    new_r = (m[new_page_addr][0], new_page_end, m[new_page_addr][2], new_phy_end)
+                    del m[new_page_addr] # delete old "end"
             else:
                 raise Exception("Page already present !")
         elif new_page_end in m:
             # print "Found end in m :"+repr(m[new_page_end])
             # End of new page is equal to present page addr
             # merge with next
-            new_r = (new_page_addr,m[new_page_end][1])
-            del m[new_page_end] # delete start of old page
-            m[new_page_addr]=new_r
-            m[new_r[1]]=new_r
-        else:
-            new_r = (new_page_addr, new_page_end)
-            m[new_page_addr] = new_r
-            m[new_page_end] = new_r
+            # check if physical is also adjacent :
+            if new_page_end == m[new_page_end][2]:
+                new_r = (new_page_addr, m[new_page_end][1], new_page_phy, m[new_page_end][3])
+                del m[new_page_end] # delete start of old page
 
-    def add_page_present(self, addr, size):
-        self.add_page(self.p, addr, size)
+        # Add new entry
+        m[new_r[0]] = new_r
+        m[new_r[1]] = new_r
+
+    def add_page_present(self, addr, size, phy=None):
+        self.add_page(self.p, addr, size, phy)
 
     def add_page_4k_not_present(self, addr):
         self.add_page_4k(self.np, addr)
@@ -51,7 +59,7 @@ class mem_map:
         s = set(self.p.values())
         
         for r in sorted(list(s), key = lambda m: m[0]):
-            print "%08x-%08x" % r
+            print "%08x-%08x => (%08x-%08x)" % r
 
 class segment_desc:
     def __init__(self, val):

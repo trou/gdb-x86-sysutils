@@ -1,3 +1,6 @@
+# This file comes from ElfEsteem.
+# https://bitbucket.org/iwseclabs/elfesteem
+# apparently licensed under the GPLv2, copyright Philippe Biondi.
 #! /usr/bin/env python
 
 import struct

@@ -73,7 +73,7 @@ class mem_map:
         s = set(self.p.values())
         
         for r in sorted(list(s), key = lambda m: m[0]):
-            print "%08x-%08x => (%08x-%08x)" % r
+            print("%08x-%08x => (%08x-%08x)" % r)
 
 class segment_desc:
     def __init__(self, val):
